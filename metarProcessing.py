@@ -9,38 +9,41 @@ FULLTIME_RE = re.compile(r"""\s*(?P<year>\d{4})
                         """,
                          re.VERBOSE)
 
-def _handle_fulltime(metarStr, prog, pos):
+def _handle_fulltime(identif, d):
     """
     Parse the full time 
     """
-    d = prog.match(metarStr, pos=pos)
+    if not d:
+        return "", ""
     translation = f"year: {d['year']}| month: {d['month']}| day: {d['day']}| hour:{d['hour']}| minute: {d['minute']}"
-    return  translation, (d.start(), d.end())
+    return  translation, d.end()
 ######################################################################################
 TYPE_RE = re.compile(r"""\s*(?P<type>(METAR)|(TAF))\s*    
                         """,
                          re.VERBOSE)
 
-def _handle_type(metarStr, prog, pos):
+def _handle_type(identif, d):
     """
     Parse the message type 
     """
-    d = prog.match(metarStr, pos=pos)
+    if not d:
+        return "", ""
     translation = f"type: {d['type']}"
-    return (translation, (d.start(), d.end()))
+    return translation, d.end()
 
 ######################################################################################
 ICAO_RE = re.compile(r"""\s*(COR\s)?(?P<icao>\w{4})\s*    
                         """,
                          re.VERBOSE)
 
-def _handle_icao(metarStr, prog, pos):
+def _handle_icao(identif, d):
     """
     Parse the icao identifier 
     """
-    d = prog.match(metarStr, pos=pos)
+    if not d:
+        return "", ""
     translation = f"icao: {d['icao']}"
-    return (translation, (d.start(), d.end()))
+    return translation, d.end()
 ######################################################################################
 ISSUANCE_TIME_RE = re.compile(r"""\s*(?P<day>\d{2})
                                     (?P<hour>\d{2})
@@ -48,14 +51,14 @@ ISSUANCE_TIME_RE = re.compile(r"""\s*(?P<day>\d{2})
                         """,
                          re.VERBOSE)
 
-def _handle_issuance_time(metarStr, prog, pos):
+def _handle_issuance_time(identif, d):
     """
     Parse the icao identifier 
     """
-    d = prog.match(metarStr, pos=pos)
+    if not d:
+        return "", ""
     translation = f"day: {d['day']} | hour: {d['hour']} | minute: {d['minute']}"
-    return (translation, (d.start(), d.end()))
-
+    return translation, d.end()
 ######################################################################################
 WIND_RE = re.compile(r"""\s*(?P<dir>[\d]{3}|VRB)
                     (?P<speed>[\d]{2})
@@ -63,7 +66,7 @@ WIND_RE = re.compile(r"""\s*(?P<dir>[\d]{3}|VRB)
                     (?P<unit>KT|MPS)\s*""",        # KT/MPS have different speed unit
                     re.VERBOSE)
 
-def _handle_wind(metarStr, prog, pos):
+def _handle_wind(identif, d):
     """
     Parse the wind and variable-wind groups.
 
@@ -73,13 +76,14 @@ def _handle_wind(metarStr, prog, pos):
         gust:       gust speed  (optional)
         unit:       (1.852 km/h) or (0.51444 m/s) per knot | "MPS" means "meter"
     """
-    d = prog.match(metarStr, pos=pos)
+    if not d:
+        return "", ""
     direction = d['dir']
     speed = d['speed']
     gust = d['gust'] if d['gust'] else None
     unit = 'knot' if d['unit'] == 'KT' else 'm/s'
     translation = f"direction: {direction}| sustain speed: {speed}| gust: {gust}| unit: {unit}"
-    return (translation, (d.start(), d.end()))
+    return translation, d.end()
 #########################################################################################
 WIND_VARIABILITY_RE = re.compile(r"""\s*(?P<lower>[\d]{3})
                             V
@@ -87,7 +91,7 @@ WIND_VARIABILITY_RE = re.compile(r"""\s*(?P<lower>[\d]{3})
                         """,
                         re.VERBOSE)
 
-def _handle_wind_variability(metarStr, prog, pos):
+def _handle_wind_variability(identif, d):
     """
     Parse the wind variability groups.
 
@@ -95,11 +99,12 @@ def _handle_wind_variability(metarStr, prog, pos):
         lower direction:        wind direction 
         upper direction:      wind speed
     """
-    d = prog.match(metarStr, pos=pos)
+    if not d:
+        return "", ""
     lower = d['lower']
     upper = d['upper']
     translation = f"direction varying between: {lower}| and: {upper} degree"
-    return (translation, (d.start(), d.end()))
+    return translation, d.end()
 #########################################################################################
 VISIBILITY_RE = re.compile(r"""\s*((?P<const>[\d]\s)?  (?P<num>[\d]+)  (/(?P<den>[\d]+))? SM)   # statute miles
                             |
@@ -107,20 +112,21 @@ VISIBILITY_RE = re.compile(r"""\s*((?P<const>[\d]\s)?  (?P<num>[\d]+)  (/(?P<den
                             """,
                             re.VERBOSE)
 
-def _handle_visibility(metarStr, prog, pos):
+def _handle_visibility(identif, d):
     """
     Parse the visibility. (Two standards:  1. with "SM" on the end;   2. 4 decimal numbers.
     The following attributes are set:
             1. constant + numerator / denominator,
             2. 4 decimal numbers.
     """
-    d = prog.match(metarStr, pos=pos)
+    if not d:
+        return "", ""
     constant = int(d['const']) if d['const'] else 0
     numerator = int(d['num']) if d['num'] else 0
     denominator = int(d['den']) if d['den'] else 1
     meter = d['meter']
     translate = f"meter: {meter}" if meter else f"statute mile: {constant+numerator/denominator}"
-    return (translate, (d.start(), d.end()))                           
+    return translate, d.end()
 #########################################################################################
 RUNWAY_RE = re.compile(r"""\s*(?P<runway>R[\d]+[L|R]?)
                         /
@@ -135,7 +141,7 @@ RUNWAY_RE = re.compile(r"""\s*(?P<runway>R[\d]+[L|R]?)
                         """,
                         re.VERBOSE)
 
-def _handle_runway(metarStr, prog, pos):
+def _handle_runway(identif, d):
     """
     Parse the Runway related information. 
     The following attributes are set:
@@ -144,9 +150,10 @@ def _handle_runway(metarStr, prog, pos):
         prefix:     M/P -- less than / greater than
         unit:       "FT" -- ft  / None
     """
+    if not d:
+        return "", ""
     translate = {'M': 'less than', 'P': 'greater than', 'N': 'static trend', 'D': 'decreasing trend', \
                      'U': 'increasing trend', '': '', None: ''}
-    d = prog.match(metarStr, pos=pos)
     runway = d['runway']
     vary = True if d['vary'] else False
     unit = 'ft' if d['unit'] else 'meter'
@@ -157,7 +164,7 @@ def _handle_runway(metarStr, prog, pos):
         translate =  f"runway: {runway} | visibility: from {prefix_low} {low}  to {prefix_high} {high}| unit: {unit} | trend: {trend}"
     else:
         translate =  f"runway: {runway} | visibility: {prefix_low} {low} | unit: {unit} | trend: {trend}"
-    return (translate, (d.start(), d.end()))
+    return translate, d.end()
                               
 #########################################################################################
 WEATHER_RE = re.compile(r"""\s*(?P<int>(-|\+)?)
@@ -168,7 +175,7 @@ WEATHER_RE = re.compile(r"""\s*(?P<int>(-|\+)?)
                         """,
                         re.VERBOSE)
 
-def _handle_weather(metarStr, prog, pos):
+def _handle_weather(identif, d):
     """
     Parse the weather. 
     The following attributes are set:
@@ -181,16 +188,17 @@ def _handle_weather(metarStr, prog, pos):
     ########################################################
     # TODO: there may be more than one weather description.#
     ########################################################
-    WEATHER_INT = {'-': 'light', '+': 'heavy', '-VC': 'nearby light', '+VC': 'nearby heavy', 'VC': 'nearby', '': ''}
+    if not d or d.start() == d.end():
+        return "", ""
+    WEATHER_INT = {'-': 'light', '+': 'heavy', '-VC': 'nearby light', '+VC': 'nearby heavy', 'VC': 'nearby', '': '', None: ''}
     WEATHER_DESC = { 'BC': 'patches of','BL': 'blowing','DR': 'low drifting','FZ': 'freezing', 'MI': 'shallow', \
-                    'PR': 'partial', 'SH': 'showers', 'TS': 'thunderstorm', '': ''}
+                    'PR': 'partial', 'SH': 'showers', 'TS': 'thunderstorm', '': '', None: ''}
     WEATHER_PREC = {'DZ': 'drizzle', 'GR': 'hail', 'GS': 'snow pellets', 'IC': 'ice crystals','PL': 'ice pellets', \
-                    'RA': 'rain', 'SG': 'snow grains', 'SN': 'snow',  'UP': 'unknown precipitation', '': ''}
+                    'RA': 'rain', 'SG': 'snow grains', 'SN': 'snow',  'UP': 'unknown precipitation', '': '', None: ''}
     WEATHER_OBSC = {'BR': 'mist', 'FG': 'fog', 'FU': 'smoke', 'VA': 'volcanic ash', 'DU': 'dust', 'SA': 'sand', \
-                    'HZ': 'haze', 'PY': 'spray', '': ''}
-    WEATHER_OTHER = {'PO': 'san whirls', 'SQ': 'squalls', 'FC': 'funnel cloud', 'SS': 'sandstorm', 'DS': 'dust storm', None: ''}
+                    'HZ': 'haze', 'PY': 'spray', '': '', None: ''}
+    WEATHER_OTHER = {'PO': 'san whirls', 'SQ': 'squalls', 'FC': 'funnel cloud', 'SS': 'sandstorm', 'DS': 'dust storm', '': '', None: ''}
     # WEATHER_SPECIAL = {'+FC': 'tornado', None: ''}
-    d = prog.match(metarStr, pos=pos)
     intensity = WEATHER_INT[d['int']]
     descriptor = WEATHER_DESC[d['desc']]
     precitation = WEATHER_PREC[d['prec']]
@@ -198,14 +206,14 @@ def _handle_weather(metarStr, prog, pos):
     other = WEATHER_OTHER[d['other']]
 
     translation = f"{intensity} {descriptor} {precitation} {obscuration} {other}"
-    return (translation, (d.start(), d.end()))
+    return translation, d.end()
 #########################################################################################
 CLOUDS_RE = re.compile(r"""\s*(?P<cover>SKC|FEW|SCT|BKN|OVC|VV)
                             (?P<height>[\d]{2,4})\s*
                         """,
                         re.VERBOSE)
 
-def _handle_clouds(metarStr, prog, pos):
+def _handle_clouds(identif, d):
     """
     Parse the clouds. 
     The following attributes are set:
@@ -215,12 +223,13 @@ def _handle_clouds(metarStr, prog, pos):
     ########################################################
     # TODO: there may be more than one clouds description. #
     ########################################################
+    if not d:
+        return "", ""
     CLOUDS_INDI = {'SKC': 'sky clear', 'FEW': 'few', 'SCT': 'scattered', 'BKN': 'broken', 'OVC': 'overcast'}
-    d = prog.match(metarStr, pos=pos)
     prefix = CLOUDS_INDI[d['cover']]
     height = d['height']
     translation = f"{prefix} {height}"
-    return translation, (d.start(), d.end())
+    return translation, d.end()
 
 #########################################################################################
 TEMP_RE = re.compile(r"""\s*(?P<minus_f1>M?)(?P<temp>\d{2})
@@ -229,7 +238,7 @@ TEMP_RE = re.compile(r"""\s*(?P<minus_f1>M?)(?P<temp>\d{2})
                     """,
                     re.VERBOSE)
 
-def _handle_temp(metarStr, prog, pos):
+def _handle_temp(identif, d):
     """
     Parse the temp. It has form like (01/M01)
     The following attributes are set:
@@ -238,48 +247,50 @@ def _handle_temp(metarStr, prog, pos):
             3. minus_f2:      flag for minus sign ("-")
             3. dewpoint:      dewpoint
     """
-    d = prog.match(metarStr, pos)
+    if not d:
+        return "", ""
     minus_f1 = -1 if d['minus_f1'] else 1
     minus_f2 = -1 if d['minus_f2'] else 1
     temp = minus_f1 * int(d['temp'])
     dewpoint = minus_f2 * int(d['dewpoint'])
 
     translation = f"temperature: {temp} | dewpoint: {dewpoint}" 
-    return translation, (d.start(), d.end())
+    return translation, d.end()
 #########################################################################################
 ALTIMETER_RE = re.compile(r"""\s*(?P<unit>A|Q)?
                             (?P<press>\d{3,4})\s*
                         """,
                         re.VERBOSE)
-def _handle_altimeter(metarStr, prog, pos):
+def _handle_altimeter(identif, d):
     """
     Parse the temp. It has form like (A2984 / Q1011)
     The following attributes are set:
             1. unit:    A-- inches /  Q-- hPa
             2. press:   pressure number
     """
-    d = prog.match(metarStr, pos=pos)
+    if not d:
+        return "", ""
     unit = 'inches' if d['unit'] == 'A' else 'hPa'
     press = int(d['press'])
 
     translation = f"sea level pressure: {press} | unit: {unit}"
-    return  translation, (d.start(), d.end())
+    return  translation, d.end()
 #########################################################################################
 
 # a list of handler function to use (in order to process a METAR report)
-handlers = [ (FULLTIME_RE, _handle_fulltime, 'fulltime', False),
-             (TYPE_RE, _handle_type, 'type', False),
-             (ICAO_RE, _handle_icao, 'icao', False),
-             (ISSUANCE_TIME_RE, _handle_issuance_time, 'issuancetime', False),
-             (WIND_RE, _handle_wind, 'wind', False),
-             (WIND_VARIABILITY_RE, _handle_wind_variability, 'variability', False),
-             (VISIBILITY_RE, _handle_visibility, 'visibility', True),
-             (RUNWAY_RE, _handle_runway, 'runway', True),
-             (WEATHER_RE, _handle_weather, 'weather', True),
-             (CLOUDS_RE, _handle_clouds, 'clouds', True),
-             (TEMP_RE, _handle_temp, 'temp', False),
-             (ALTIMETER_RE, _handle_altimeter, 'altimeter', True)
-            ]
+# handlers = [ (FULLTIME_RE, _handle_fulltime, 'fulltime', False),
+#              (TYPE_RE, _handle_type, 'type', False),
+#              (ICAO_RE, _handle_icao, 'icao', False),
+#              (ISSUANCE_TIME_RE, _handle_issuance_time, 'issuancetime', False),
+#              (WIND_RE, _handle_wind, 'wind', False),
+#              (WIND_VARIABILITY_RE, _handle_wind_variability, 'variability', False),
+#              (VISIBILITY_RE, _handle_visibility, 'visibility', True),
+#              (RUNWAY_RE, _handle_runway, 'runway', True),
+#              (WEATHER_RE, _handle_weather, 'weather', True),
+#              (CLOUDS_RE, _handle_clouds, 'clouds', True),
+#              (TEMP_RE, _handle_temp, 'temp', False),
+#              (ALTIMETER_RE, _handle_altimeter, 'altimeter', True)
+#             ]
 
 
 def decode_mini(metarStr):
@@ -289,7 +300,6 @@ def decode_mini(metarStr):
              (ISSUANCE_TIME_RE, _handle_issuance_time, 'issuancetime', False),
              (WIND_RE, _handle_wind, 'wind', False),
              (WIND_VARIABILITY_RE, _handle_wind_variability, 'variability', False),
-
              (VISIBILITY_RE, _handle_visibility, 'visibility', True),
              (RUNWAY_RE, _handle_runway, 'runway', True),
              (WEATHER_RE, _handle_weather, 'weather', True),
@@ -306,38 +316,18 @@ def decode_mini(metarStr):
         pattern, handler, identif, repeat = handlers[igroup]
         # if repeat, then do multiple times (we also need to consider the exception)
         # if not repeat, then just do one time
-        if repeat:
-            while True:
-                try:
-                    res = handler(metarStr, pattern, pos=pos)
-                    print(res[0])
-                    pos = res[1][1]
-                except Exception as e:
-                    # log metarStr when exception
-                    errorMsg = errorMsg + ";" + identif
-                    print(f'metarStr: {metarStr}, e.message {errorMsg}')
-                    break
-        else:
-            try:
-                res = handler(metarStr, pattern, pos=pos)
-                print(res[0])
-                pos = res[1][1]
-            except Exception as e:
-                # log metarStr when exception
-                errorMsg = errorMsg + ";" + identif
-                print(f'metarStr: {metarStr}, e.message {errorMsg}')
-
-
-
-        # try:
-        #     res = handler(metarStr, pattern, pos=pos)
-        #     print(res[0])
-        #     pos = res[1][1]
-        # except Exception as e:
-        #     # log metarStr when exception
-        #     errorMsg = errorMsg + ";" + identif
-        #     print(f'metarStr: {metarStr}, e.message {errorMsg}')
+        while True:
+            d = pattern.match(metarStr, pos=pos)
+            text, p = handler(identif, d)         # if there is no match..
+            if not text:
+                print(f"identif: {identif};  no text matched")
+                break
+            pos = p
+            print(f'identif : {identif} | text: {text}')
+            if not repeat:
+                break                               # not repeat, only do once.
         igroup += 1
+        
 
 if __name__ == '__main__':
     metarStr = "201707310300 METAR ZPPP 310300Z 26002MPS 200V300 5000 BR SCT023 Q1010"
@@ -355,15 +345,15 @@ def decodeMetar(metarStr):
         8. Sky Cover
         9. Altimeter setting 
     """
-    ngroup = len(handlers)
-    igroup = 0
-    content = ['time', 'type', 'icao', 'issuance time', 'wind', 'visibility', 'weather', 'sky', 'altimeter']
-    message = {}
-    for c in content:
-        message[c] = ''
-    while igroup < ngroup:
-        pattern, handler, identif, repeat = handlers[igroup]
-        res = handler('test', pattern, 0)
+    # ngroup = len(handlers)
+    # igroup = 0
+    # content = ['time', 'type', 'icao', 'issuance time', 'wind', 'visibility', 'weather', 'sky', 'altimeter']
+    # message = {}
+    # for c in content:
+    #     message[c] = ''
+    # while igroup < ngroup:
+    #     pattern, handler, identif, repeat = handlers[igroup]
+    #     res = handler('test', pattern, 0)
     return ""
 
 

@@ -416,7 +416,8 @@ class metarProcessing(object):
                                 re.VERBOSE)
         # "CAVOK" code
         if CAVOK_RE.search(metarStr):
-            return True, 9999, "15sm"
+            # return True, 9999, "15sm"
+            return True
         # ceiling
         ceilingRes = CEILING_RE.findall(metarStr)
         if not ceilingRes:
@@ -428,17 +429,20 @@ class metarProcessing(object):
             # ceilingNum = min(ceilingList)
         # visibility
         d = VISIBILITY_RE.search(metarStr)
-        constant = int(d['const']) if d['const'] else 0
-        numerator = int(d['num']) if d['num'] else 0
-        denominator = int(d['den']) if d['den'] else 1
-        meter = int(d['meter']) if d['meter'] else 0
-        
-        if meter:
-            visibility = True if meter >= 5000 else False       # visibility >= 5km
-            # visibilityNum = meter
+        if d:
+            constant = int(d['const']) if d['const'] else 0
+            numerator = int(d['num']) if d['num'] else 0
+            denominator = int(d['den']) if d['den'] else 1
+            meter = int(d['meter']) if d['meter'] else 0
+            
+            if meter:
+                visibility = True if meter >= 5000 else False       # visibility >= 5km
+                # visibilityNum = meter
+            else:
+                visibility = True if (constant + numerator / denominator) >= 3 else False   # visibility >= 3SM
+                # visibilityNum = f'{constant + numerator / denominator} sm'
         else:
-            visibility = True if (constant + numerator / denominator) >= 3 else False   # visibility >= 3SM
-            # visibilityNum = f'{constant + numerator / denominator} sm'
+            visibility = False
         
         return ceiling and visibility
 
@@ -471,21 +475,21 @@ class metarProcessing(object):
         return resList
 
     def decodeFileMetar(self, filename, storeDir='VMC_decoded'):
-        mp = metarProcessing(filename)
-        mp.open()
+        self.fileDir = filename
+        self.open()
         time, city, repType, VMC = [], [], [], []
         
         while True:
-            metar = mp.getNextRecord()
+            metar = self.getNextRecord()
             if not metar:
                 break
-            t, c, r, v = mp.decodeVMC(metar)
+            t, c, r, v = self.decodeVMC(metar)
             time.append(t)
             city.append(c)
             repType.append(r)
             VMC.append(v)
 
-        mp.close()
+        self.close()
         resDic = {'time': time, 'city': city, 'repType': repType, 'VMC': VMC}
         resDic = pd.DataFrame(resDic)
         # make dir
@@ -497,6 +501,10 @@ class metarProcessing(object):
 
 
 if __name__ == '__main__':
-    filename = 'CYOW-2017-01.txt'
-    mp = metarProcessing(filename)
-    mp.decodeFileMetar(filename)
+    filedir = '.'
+    rawFileList = os.listdir(filedir)
+    for rfl in rawFileList:
+        if rfl.endswith('.txt'):
+            filename = os.path.join(filedir, rfl)
+            mp = metarProcessing(filename)
+            mp.decodeFileMetar(filename)

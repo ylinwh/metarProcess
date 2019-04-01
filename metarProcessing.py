@@ -1,5 +1,7 @@
 import re
+import numpy as np
 import pandas as pd
+import os
 
 ## full time
 FULLTIME_RE = re.compile(r"""\s*(?P<year>\d{4})
@@ -16,7 +18,7 @@ def _handle_fulltime(identif, d):
     """
     if not d:
         return "", ""
-    translation = f"year: {d['year']}| month: {d['month']}| day: {d['day']}| hour:{d['hour']}| minute: {d['minute']}"
+    translation = f"{d['year']}-{d['month']}-{d['day']} {d['hour']}:{d['minute']}"
     return  translation, d.end()
 ## type
 TYPE_RE = re.compile(r"""\s*(?P<type>(METAR)|(SPECI)|(TAF))\s*    
@@ -29,7 +31,7 @@ def _handle_type(identif, d):
     """
     if not d:
         return "", ""
-    translation = f"type: {d['type']}"
+    translation = f"{d['type']}"
     return translation, d.end()
 
 ## icao code
@@ -43,7 +45,7 @@ def _handle_icao(identif, d):
     """
     if not d:
         return "", ""
-    translation = f"icao: {d['icao']}"
+    translation = f"{d['icao']}"
     return translation, d.end()
 ## issuance time
 ISSUANCE_TIME_RE = re.compile(r"""\s*(?P<day>\d{2})
@@ -58,7 +60,7 @@ def _handle_issuance_time(identif, d):
     """
     if not d:
         return "", ""
-    translation = f"day: {d['day']} | hour: {d['hour']} | minute: {d['minute']}"
+    translation = f"{d['day']}th {d['hour']}:{d['minute']}"
     return translation, d.end()
 
 ## wind (wind direction; speed; gust; unit)
@@ -84,7 +86,7 @@ def _handle_wind(identif, d):
     speed = d['speed']
     gust = d['gust'] if d['gust'] else None
     unit = 'knot' if d['unit'] == 'KT' else 'm/s'
-    translation = f"direction: {direction}| sustain speed: {speed}| gust: {gust}| unit: {unit}"
+    translation = f"direction: {direction}; sustain speed: {speed}; gust: {gust}; unit: {unit}"
     return translation, d.end()
 
 ## wind variability
@@ -106,7 +108,7 @@ def _handle_wind_variability(identif, d):
         return "", ""
     lower = d['lower']
     upper = d['upper']
-    translation = f"direction varying between: {lower}| and: {upper} degree"
+    translation = f"direction varying between: {lower} and {upper} degree"
     return translation, d.end()
 
 ## visibility
@@ -129,7 +131,7 @@ def _handle_visibility(identif, d):
     numerator = int(d['num']) if d['num'] else 0
     denominator = int(d['den']) if d['den'] else 1
     meter = d['meter']
-    translate = f"meter: {meter}" if meter else f"statute mile: {constant+numerator/denominator}"
+    translate = f"{meter} meter" if meter else f"{constant+numerator/denominator} statute mile"
     return translate, d.end()
 
 ## runway
@@ -166,9 +168,9 @@ def _handle_runway(identif, d):
     prefix_low, prefix_high = translate[d['prefix_low']], translate[d['prefix_high']]
     low, high = d['low'], d['high']
     if vary:
-        translate =  f"runway: {runway} | visibility: from {prefix_low} {low}  to {prefix_high} {high}| unit: {unit} | trend: {trend}"
+        translate =  f"runway: {runway}; visibility: from {prefix_low} {low}  to {prefix_high} {high}; unit: {unit}; with {trend}"
     else:
-        translate =  f"runway: {runway} | visibility: {prefix_low} {low} | unit: {unit} | trend: {trend}"
+        translate =  f"runway: {runway}; visibility: {prefix_low} {low}; unit: {unit}; with {trend}"
     return translate, d.end()
                               
 ## weather
@@ -219,7 +221,7 @@ def _handle_weather(identif, d):
     other = WEATHER_OTHER[d['other']]
 
     translation = f"{intensity} {descriptor} {precitation} {obscuration} {other}"
-    return translation, d.end()
+    return translation.strip(), d.end()
 
 ## clouds
 CLOUDS_RE = re.compile(r"""\s*(?P<cover>SKC|FEW|SCT|BKN|OVC|VV)
@@ -266,7 +268,7 @@ def _handle_temp(identif, d):
     temp = minus_f1 * int(d['temp'])
     dewpoint = minus_f2 * int(d['dewpoint'])
 
-    translation = f"temperature: {temp} | dewpoint: {dewpoint}" 
+    translation = f"temperature: {temp}; dewpoint: {dewpoint}" 
     return translation, d.end()
 ## altimeter
 ALTIMETER_RE = re.compile(r"""\s*(?P<unit>A|Q)?
@@ -285,7 +287,7 @@ def _handle_altimeter(identif, d):
     unit = 'inches' if d['unit'] == 'A' else 'hPa'
     press = int(d['press'])
 
-    translation = f"sea level pressure: {press} | unit: {unit}"
+    translation = f"sea level pressure: {press}; unit: {unit}"
     return  translation, d.end()
 
 
@@ -312,6 +314,7 @@ class metarProcessing(object):
                     (TEMP_RE, _handle_temp, 'temp', False),
                     (ALTIMETER_RE, _handle_altimeter, 'altimeter', True)
                     ]
+        self.metarReport = {}
 
     def close(self):
         self.f.close()
@@ -373,44 +376,112 @@ class metarProcessing(object):
                 if not text:
                     if not message[identif]:
                         # print(f"identif: {identif}| message:  no text matched")
-                        errorMsg += f"identif: {identif}| message:  no text matched\n"
+                        errorMsg += f"{identif}:  no text matched;"
                     break
                 pos = p
                 # print(f'identif : {identif} | message: {text}')
-                message[identif] += f'identif : {identif} | message: {text}\n'
+                message[identif] += f'{identif}: {text};'
                 if not repeat:
                     break                               # not repeat, only do once.
+            # message[identif] = message[identif].rstrip('\n ')
             igroup += 1
         return message, errorMsg
+    
+    def vmcMinima(self, metarStr):
+        """
+        VMC minima
+        a) when the ceiling is less than 450m (1500 ft); or
+        b) when the ground visibility is less than 5 km  (1SM = 1.60934)
+        c) False for IMC; True for VMC
+        ----------------------------------------------------------------
+        "CAVOK" - horizontal visibility of 10000 meters or more and no clouds below 5000 feet.
+        """
+        # the regex used...
+        # _handle_visibility     _handle_clouds
+        CAVOK_RE = re.compile(r"""\sCAVOK\s""")
+        CEILING_RE = re.compile(r"""\s*(BKN|OVC)
+                                (\d{2,4})\s*
+                                """,
+                                re.VERBOSE)
+        VISIBILITY_RE = re.compile(r"""\s((?P<const>[\d]\s)?  (?P<num>[\d]+)  (/(?P<den>[\d]+))? SM)\s   # statute miles
+                                |
+                                \s(?P<meter>([\d][\d][05][0])|([9]{4}))\s                              # meters
+                                """,
+                                re.VERBOSE)
+        # "CAVOK" code
+        if CAVOK_RE.search(metarStr):
+            return True, 9999, "15sm"
+        # ceiling
+        ceilingRes = CEILING_RE.findall(metarStr)
+        if not ceilingRes:
+            ceiling = True
+            # ceilingNum = 9999
+        else:
+            ceilingList = [int(height) for prefix, height in ceilingRes]
+            ceiling = True if min(ceilingList) >= 15 else False
+            # ceilingNum = min(ceilingList)
+        # visibility
+        d = VISIBILITY_RE.search(metarStr)
+        constant = int(d['const']) if d['const'] else 0
+        numerator = int(d['num']) if d['num'] else 0
+        denominator = int(d['den']) if d['den'] else 1
+        meter = int(d['meter']) if d['meter'] else 0
+        
+        if meter:
+            visibility = True if meter >= 5000 else False       # visibility >= 5km
+            # visibilityNum = meter
+        else:
+            visibility = True if (constant + numerator / denominator) >= 3 else False   # visibility >= 3SM
+            # visibilityNum = f'{constant + numerator / denominator} sm'
+        
+        return ceiling and visibility
 
-
-class metarData(object):
-    def __init__(self):
-        self.reportType = 'METAR'
-        self.location = None
-        self.dateTime = None
-        self.wind = None
-        self.windVariability = None
-        self.visibility = None
-        self.runwayVisualRange = None
-        self.typeWeather = None
-        self.clouds = None
-        self.temperature = None
-        self.altimeter = None
-        self.remarks = None
-
-
+    def decodeVMC(self, metar):
+        vmc = self.vmcMinima(metar)
+        def handle_time(metar):
+            prog = re.compile(r"^\s*(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})(?P<hour>\d{2})(?P<minute>\d{2})\s")
+            res = prog.search(metar)
+            if not res:
+                return None
+            return f"{res.group('year')}-{res.group('month')}-{res.group('day')} {res.group('hour')}:{res.group('month')}"
+        
+        def handle_city(metar):
+            prog = re.compile(r"\s(COR\s)?(?P<icao>\w{4})\s")
+            res = prog.search(metar)
+            if not res:
+                return None
+            return f"{res.group('icao')}"
+        
+        def handle_type(metar):
+            prog = re.compile(r"\s(?P<type>(METAR)|(SPECI)|(TAF))\s")
+            res = prog.search(metar)
+            if not res:
+                return None
+            return f"{res.group('type')}"
+        # current time/city/type
+        handlers = [handle_time, handle_city, handle_type, self.vmcMinima]
+        resList = []
+        for h in handlers:
+            resList.append(h(metar))
+        return resList
 
 
 if __name__ == '__main__':
-    mp = metarProcessing('CYOW-2017-01.txt')
-    metarList = []
+    filename = 'CYOW-2017-01.txt'
+    mp = metarProcessing(filename)
+    time, city, repType, VMC = [], [], [], []
+    
     while True:
         metar = mp.getNextRecord()
-        print(f"current metar record: {metar}\n\n")
         if not metar:
             break
-        metarMsg, metarErr = mp.decodeMetar(metar)
-        metarList.append(metarMsg)
-    metarDF = pd.DataFrame(metarList)
-    # store the dataframe...
+        t, c, r, v = mp.decodeVMC(metar)
+        time.append(t)
+        city.append(c)
+        repType.append(r)
+        VMC.append(v)
+
+    mp.close()
+    resDic = {'time': time, 'city': city, 'repType': repType, 'VMC': VMC}
+    resDic = pd.DataFrame(resDic)
+    resDic.to_csv(os.path.splitext(filename)[0] + '_VMC.csv', index=False)

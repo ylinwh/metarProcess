@@ -294,7 +294,9 @@ def _handle_altimeter(identif, d):
 class metarProcessing(object):
 
     def __init__(self, fileDir):
-        self.f = open(fileDir, 'r')
+        # be careful with the empty fileDir !!!!
+        self.fileDir=fileDir
+        self.f = None
         self.curRecord = ""
 
         self.startProg = re.compile(r"\s*\d{12}")
@@ -316,8 +318,12 @@ class metarProcessing(object):
                     ]
         self.metarReport = {}
 
+    def open(self):
+        self.f = open(self.fileDir, 'r')
+
     def close(self):
-        self.f.close()
+        if self.f:
+            self.f.close()
 
     def isRecordStart(self, line):
         """ record start: continuous 12 number
@@ -437,7 +443,6 @@ class metarProcessing(object):
         return ceiling and visibility
 
     def decodeVMC(self, metar):
-        vmc = self.vmcMinima(metar)
         def handle_time(metar):
             prog = re.compile(r"^\s*(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})(?P<hour>\d{2})(?P<minute>\d{2})\s")
             res = prog.search(metar)
@@ -460,28 +465,38 @@ class metarProcessing(object):
             return f"{res.group('type')}"
         # current time/city/type
         handlers = [handle_time, handle_city, handle_type, self.vmcMinima]
-        resList = []
-        for h in handlers:
-            resList.append(h(metar))
+        resList = [None] * 4
+        for ind, h in enumerate(handlers):
+            resList[ind] = (h(metar))
         return resList
+
+    def decodeFileMetar(self, filename, storeDir='VMC_decoded'):
+        mp = metarProcessing(filename)
+        mp.open()
+        time, city, repType, VMC = [], [], [], []
+        
+        while True:
+            metar = mp.getNextRecord()
+            if not metar:
+                break
+            t, c, r, v = mp.decodeVMC(metar)
+            time.append(t)
+            city.append(c)
+            repType.append(r)
+            VMC.append(v)
+
+        mp.close()
+        resDic = {'time': time, 'city': city, 'repType': repType, 'VMC': VMC}
+        resDic = pd.DataFrame(resDic)
+        # make dir
+        try:
+            os.mkdir(storeDir)
+        except:
+            pass
+        resDic.to_csv(os.path.join(storeDir, os.path.splitext(filename)[0] + '_VMC.csv'), index=False)
 
 
 if __name__ == '__main__':
     filename = 'CYOW-2017-01.txt'
     mp = metarProcessing(filename)
-    time, city, repType, VMC = [], [], [], []
-    
-    while True:
-        metar = mp.getNextRecord()
-        if not metar:
-            break
-        t, c, r, v = mp.decodeVMC(metar)
-        time.append(t)
-        city.append(c)
-        repType.append(r)
-        VMC.append(v)
-
-    mp.close()
-    resDic = {'time': time, 'city': city, 'repType': repType, 'VMC': VMC}
-    resDic = pd.DataFrame(resDic)
-    resDic.to_csv(os.path.splitext(filename)[0] + '_VMC.csv', index=False)
+    mp.decodeFileMetar(filename)

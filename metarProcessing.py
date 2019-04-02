@@ -452,7 +452,8 @@ class metarProcessing(object):
             res = prog.search(metar)
             if not res:
                 return None
-            return f"{res.group('year')}-{res.group('month')}-{res.group('day')} {res.group('hour')}:{res.group('month')}"
+            return f"{res.group('year')}{res.group('month')}{res.group('day')}{res.group('hour')}{res.group('minute')}"
+            # return f"{res.group('year')}-{res.group('month')}-{res.group('day')} {res.group('hour')}:{res.group('minute')}"
         
         def handle_city(metar):
             prog = re.compile(r"\s(COR\s)?(?P<icao>\w{4})\s")
